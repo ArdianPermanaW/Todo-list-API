@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const connectDB = require('./src/config/db');
 const authRoutes = require('./src/routes/authRoutes');
+const todoRoutes = require('./src/routes/todoRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,6 +15,7 @@ connectDB();
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/todos', todoRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running');

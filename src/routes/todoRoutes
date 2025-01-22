@@ -1,0 +1,100 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const Todo = require('../models/Todo');
+const authMiddleware = require('../middleware/authMiddleware'); // Middleware for verifying tokens
+
+const router = express.Router();
+
+//Create
+router.post('/', authMiddleware, [
+    body('title').notEmpty().withMessage('Title is required'),
+    body('description').optional().isString(),
+    body('dueDate').optional().isISO8601().toDate(),
+], async (req,res) => {
+    const errors = validationResult(req); 
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    try{
+        const { title, description, dueDate } = req.body;
+        const todo = new Todo({
+            user: req.user.id,
+            title,
+            description,
+            dueDate,
+        });
+        await todo.save();
+        res.status(201).json(todo);
+    } catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+//Get in user account with pagination
+router.get('/', authMiddleware, async (req, res) => {
+    try {
+        //set params
+        const page = parseInt(req.query.page) || 1; // Default to page 1
+        const limit = parseInt(req.query.limit) || 10; // Default to 10 items per page
+        const skip = (page - 1) * limit;
+
+        const todos = await Todo.find({ user: req.user.id })
+            .sort({ createdAt: -1 }) // sort by creation date
+            .skip(skip)
+            .limit(limit);
+
+        const totalTodos = await Todo.countDocuments({ user: req.user.id });
+
+        res.status(200).json({
+            todos,
+            currentPage: page,
+            totalPages: Math.ceil(totalTodos / limit),
+            totalTodos,
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+//Update
+router.put('/:id', authMiddleware, async (req,res) => {
+    try{
+        const id = req.params;
+        const { title, description, dueDate, status } = req.body; 
+
+        const todo = await Todo.findOneAndUpdate(
+            { _id: req.params.id, user: req.user.id }, 
+            { title, description, dueDate, status },
+            { new: true }
+        );
+
+        if (!todo) {
+            return res.status(404).json({ message: 'data not found' });
+        }
+
+        res.status(200).json(todo);
+    }catch (err){
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+router.delete('/', authMiddleware, async (req,res) => {
+    try{
+        const todo = await Todo.findOneAndDelete({
+            _id: req.params.id,
+            user: req.user.id,
+        });
+
+        if (!todo) {
+            return res.status(404).json({ message: 'data not found' });
+        }
+
+        res.status(200).json({message: 'Todo deleted successfully'});
+    }catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+
+module.exports = router;
